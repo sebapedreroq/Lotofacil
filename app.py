@@ -98,7 +98,7 @@ st.caption(
     "Ferramenta de organização combinatória para o bolão. Reduz o universo de jogos por matriz/família "
     "e filtros, sem prometer previsão de resultado — sorteios são independentes e aleatórios."
 )
- 
+st.info("🧪 **Versão de teste** elaborado por Seba sob supervisão da equipe Criadora.") 
 # ============================================================
 # BARRA LATERAL — controles
 # ============================================================
