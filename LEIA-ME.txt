@@ -1,0 +1,36 @@
+LOTOFÁCIL — INTERFACE WEB (Streamlit)
+=======================================
+
+COMO RODAR LOCALMENTE:
+1. Instalar dependências:
+   pip install -r requirements.txt
+
+2. (Opcional, mas recomendado) Colocar o CSV oficial de resultados na mesma
+   pasta, com o nome exato: lotofacil-download-resultados.csv
+   -- se presente, ele é carregado automaticamente para os cálculos de
+   estabilidade histórica (critério 5.6) e calibração do critério 5.3.
+   Também dá pra fazer upload dele direto na tela, sem precisar deixar na pasta.
+
+3. Rodar:
+   streamlit run app.py
+
+4. Abrir no navegador o endereço que aparecer no terminal
+   (geralmente http://localhost:8501)
+
+PRIMEIRA EXECUÇÃO:
+Na primeira vez que rodar, o app calcula o universo combinatório completo
+(3.268.760 jogos) — leva uns 15 segundos. Depois disso, ele salva um cache
+(universo_lotofacil.npz, ~17MB) na mesma pasta, e as próximas vezes carregam
+em poucos segundos.
+
+PARA HOSPEDAR NA WEB (quando estiver pronto):
+- Streamlit Community Cloud (gratuito, mais simples): conectar a um repositório
+  GitHub com esses arquivos e o requirements.txt.
+- Ou um VPS/serviço tipo Render/Railway, rodando `streamlit run app.py`.
+- O arquivo de cache (.npz) pode ser gerado uma vez e subido junto, pra evitar
+  que o primeiro usuário espere os 15s de cálculo inicial.
+
+ARQUIVOS:
+- app.py                        -> a tela (Streamlit)
+- lotofacil_numpy_engine.py     -> o motor de cálculo (filtros, F12-F14, V, score)
+- universo_lotofacil.npz        -> cache do universo (gerado na 1ª execução)
