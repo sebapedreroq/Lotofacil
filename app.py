@@ -226,6 +226,26 @@ if rodar:
  
     # ---- Score ----
     st.subheader("🏆 Score dos critérios (5.1 a 5.6)")
+
+    with st.expander("ℹ️ O que cada critério significa"):
+        st.markdown("""
+- **5.1 Concentração** — quanto do total de jogos fica concentrado nos 2 valores mais comuns desse grupo.
+  Quanto maior, mais "decisivo" é o grupo como filtro.
+- **5.2 Faixa curta** — se os 2 valores mais comuns são vizinhos (ex: 5 e 6) ou espalhados. Vizinhos = 1,0
+  (faixa mais fácil de justificar); quanto mais distantes, menor o score.
+- **5.3 Valor fixo possível** — em quantas das combinações viáveis (testadas por força bruta) esse grupo
+  consegue ficar travado num valor único (top_1) sem zerar o resultado junto com os outros grupos.
+- **5.4 Não-redundância** — o quanto esse grupo é **diferente** dos outros 10 (baseado na correlação entre
+  eles). Grupos muito parecidos entre si desperdiçam poder de filtro; quanto maior, mais "informação nova"
+  aquele grupo traz.
+- **5.5 Redução** — quantos jogos esse grupo sozinho elimina ao aplicar seu filtro (top-2) sobre a base atual.
+- **5.6 Estabilidade** — se o valor mais comum desse grupo se mantém igual comparando a 1ª metade e a 2ª
+  metade do histórico real. Se muda de uma metade pra outra, o score é zero (sinal de que pode ser só
+  coincidência estatística, não um padrão confiável).
+- **Score final** — média dos critérios acima, normalizada entre os grupos avaliados (é uma classificação
+  *relativa*: mostra quem se sai melhor dentro desse conjunto, não uma nota absoluta de qualidade).
+        """)
+
     df_score = pd.DataFrame([{
         "Grupo": r.grupo,
         "5.1 Concentração": round(r.concentracao, 3),
@@ -240,8 +260,21 @@ if rodar:
         df_score,
         hide_index=True, use_container_width=True,
         column_config={
+            "5.1 Concentração": st.column_config.NumberColumn(
+                "5.1 Concentração", help="% dos jogos cobertos pelos 2 valores mais comuns desse grupo."),
+            "5.2 Faixa curta": st.column_config.NumberColumn(
+                "5.2 Faixa curta", help="1,0 = os 2 valores mais comuns são vizinhos. Menor = mais espalhados."),
+            "5.3 Valor fixo": st.column_config.NumberColumn(
+                "5.3 Valor fixo", help="Fração das combinações viáveis em que esse grupo pôde ficar travado num valor único."),
+            "5.4 Não-redundância": st.column_config.NumberColumn(
+                "5.4 Não-redundância", help="1 menos a correlação média com os outros grupos. Maior = mais informação nova."),
+            "5.5 Redução": st.column_config.NumberColumn(
+                "5.5 Redução", help="Fração de jogos eliminada só por esse grupo, sozinho."),
+            "5.6 Estabilidade": st.column_config.NumberColumn(
+                "5.6 Estabilidade", help="0 se o valor mais comum mudou entre a 1ª e a 2ª metade do histórico real."),
             "Score final": st.column_config.ProgressColumn(
-                "Score final", min_value=0.0, max_value=1.0, format="%.3f",
+                "Score final", help="Média dos 6 critérios, normalizada entre os grupos avaliados nessa rodada.",
+                min_value=0.0, max_value=1.0, format="%.3f",
             ),
         },
     )
