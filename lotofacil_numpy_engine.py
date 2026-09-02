@@ -224,24 +224,98 @@ def selecionar_familia(universo: UniversoLotofacil, familia: Tuple[int, int, int
     return (linhas_ordenadas == alvo).all(axis=1)
 
 
-def aplicar_filtros_f(universo: UniversoLotofacil, filtros_ativos: Optional[Dict[str, bool]] = None) -> np.ndarray:
+# ============================================================
+# "A DICA DO SEU JOSÉ" -- conjunto fixo de 7 famílias, definido pela pessoa
+# que idealizou a plataforma. A seleção é a UNIÃO (OR) dos jogos que batem
+# em QUALQUER uma dessas 7 famílias (cada jogo só pode bater em uma delas,
+# já que as famílias são multisets distintos, então não há dupla-contagem).
+# ============================================================
+FAMILIAS_DICA_SEU_JOSE: List[Tuple[int, int, int, int, int]] = [
+    (5, 4, 3, 2, 1),
+    (5, 4, 2, 2, 2),
+    (5, 3, 3, 3, 1),
+    (5, 3, 3, 2, 2),
+    (4, 4, 4, 2, 1),
+    (4, 4, 3, 2, 2),
+    (4, 3, 3, 3, 2),
+]
+
+
+def selecionar_dica_seu_jose(universo: UniversoLotofacil) -> np.ndarray:
+    """Máscara booleana: jogos que batem em QUALQUER uma das 7 famílias de FAMILIAS_DICA_SEU_JOSE."""
+    mask = np.zeros(universo.N, dtype=bool)
+    for familia in FAMILIAS_DICA_SEU_JOSE:
+        mask |= selecionar_familia(universo, familia)
+    return mask
+
+
+def listar_matrizes_familia(familia: Tuple[int, int, int, int, int]) -> List[Tuple[int, int, int, int, int]]:
+    """Lista todas as matrizes (permutações de linha) distintas que pertencem a uma família."""
+    import itertools
+    return sorted(set(itertools.permutations(familia)), reverse=True)
+
+
+def contar_matrizes_familia(familia: Tuple[int, int, int, int, int]) -> int:
+    """
+    Número de matrizes distintas de uma família = 5! / (produto dos fatoriais
+    das repetições). Ex: 4/3/3/3/2 tem o valor 3 repetido 3 vezes -> 5!/3! = 20.
+    """
+    import math
+    from collections import Counter
+    repeticoes = Counter(familia)
+    denominador = 1
+    for qtd in repeticoes.values():
+        denominador *= math.factorial(qtd)
+    return math.factorial(5) // denominador
+
+
+# ============================================================
+# Filtros F que aceitam faixa min/max ajustável pelo usuário (em vez de só
+# ligar/desligar). O limite absoluto de cada um é o que já existe no código
+# -- o usuário só pode ESTREITAR a faixa, nunca alargar além disso.
+# ============================================================
+FILTROS_AJUSTAVEIS: Dict[str, Tuple[int, int]] = {
+    "IMPARES": (6, 10),
+    "PRIMOS": (3, 7),
+    "F4": (7, 11),
+}
+
+
+def aplicar_filtros_f(
+    universo: UniversoLotofacil,
+    filtros_ativos: Optional[Dict[str, bool]] = None,
+    faixas_customizadas: Optional[Dict[str, Tuple[int, int]]] = None,
+) -> np.ndarray:
     """
     Combina (AND) os filtros F que estiverem ativos. `filtros_ativos` é um dict
     {nome: True/False}; qualquer filtro OMITIDO é considerado ATIVO por padrão
     (assim a interface web pode mandar só as exceções desmarcadas).
     Nomes válidos: ver NOME_FILTROS_F.
+
+    `faixas_customizadas`: dict {nome: (min, max)} para os filtros listados em
+    FILTROS_AJUSTAVEIS (hoje: IMPARES, PRIMOS, F4). A faixa informada é sempre
+    RECORTADA (clamp) dentro do limite absoluto original -- nunca alarga além
+    do que já existia no código.
     """
     if filtros_ativos is None:
         filtros_ativos = {}
+    if faixas_customizadas is None:
+        faixas_customizadas = {}
     mask = np.ones(universo.N, dtype=bool)
     for nome, defs in FILTROS_F_DEFS.items():
         if not filtros_ativos.get(nome, True):
             continue
         cont = universo.cont_filtros_f[nome]
-        if defs["min"] is not None:
-            mask &= cont >= defs["min"]
-        if defs["max"] is not None:
-            mask &= cont <= defs["max"]
+        minimo, maximo = defs["min"], defs["max"]
+        if nome in FILTROS_AJUSTAVEIS and nome in faixas_customizadas:
+            lim_min, lim_max = FILTROS_AJUSTAVEIS[nome]
+            custom_min, custom_max = faixas_customizadas[nome]
+            minimo = max(lim_min, min(custom_min, lim_max))
+            maximo = min(lim_max, max(custom_max, lim_min))
+        if minimo is not None:
+            mask &= cont >= minimo
+        if maximo is not None:
+            mask &= cont <= maximo
     if filtros_ativos.get("SEM_COLUNA_ZERADA", True):
         cont_colunas = np.stack([_contagem_grupo(universo.M, COLUNAS[k]) for k in [1, 2, 3, 4, 5]], axis=1)
         mask &= (cont_colunas > 0).all(axis=1)
@@ -343,14 +417,43 @@ def buscar_melhor_combinacao_v_numpy(
     return resultados, top1_top2
 
 
+def escolher_combinacao_por_alvo(
+    resultados: List[CombinacaoVNumpy], alvo_jogos: int
+) -> Tuple[CombinacaoVNumpy, int]:
+    """
+    Entre as combinações já calculadas por buscar_melhor_combinacao_v_numpy,
+    escolhe a que tem qtd_jogos mais próxima de `alvo_jogos`.
+
+    Retorna (combinação escolhida, diferença absoluta em relação ao alvo).
+    Como o conjunto de combinações é discreto (2^n opções), não há garantia de
+    bater exatamente no alvo -- a diferença retornada informa o quão perto se
+    chegou, para a interface poder avisar o usuário quando o desvio for grande.
+    """
+    if not resultados:
+        raise ValueError("Nenhuma combinação viável para escolher.")
+    melhor = min(resultados, key=lambda r: abs(r.qtd_jogos - alvo_jogos))
+    return melhor, abs(melhor.qtd_jogos - alvo_jogos)
+
+
 def aplicar_melhor_combinacao_v_numpy(
     universo: UniversoLotofacil,
     mask: np.ndarray,
     grupos: Optional[Dict[str, Set[int]]] = None,
     minimo_jogos: int = 1,
     top1_top2_ref: Optional[Dict[str, Dict[int, Set[int]]]] = None,
+    alvo_jogos: Optional[int] = None,
 ) -> Tuple[np.ndarray, CombinacaoVNumpy, List[CombinacaoVNumpy]]:
-    """Atalho: roda a busca e já devolve a máscara final filtrada pela melhor combinação."""
+    """
+    Atalho: roda a busca e já devolve a máscara final filtrada pela combinação
+    escolhida.
+
+    Se `alvo_jogos` for None (padrão): escolhe a combinação MAIS RESTRITIVA
+    que ainda deixa jogos >= minimo_jogos (comportamento original).
+
+    Se `alvo_jogos` for informado: escolhe, entre as combinações viáveis, a
+    que tem quantidade de jogos mais PRÓXIMA de `alvo_jogos` (não precisa ser
+    exata -- o conjunto de combinações é discreto).
+    """
     if grupos is None:
         grupos = V_GRUPOS
     resultados, top1_top2 = buscar_melhor_combinacao_v_numpy(universo, mask, grupos, minimo_jogos, top1_top2_ref)
@@ -358,7 +461,10 @@ def aplicar_melhor_combinacao_v_numpy(
         raise ValueError(
             f"Nenhuma combinação de top_1/top_2 deixou jogos suficientes (mínimo: {minimo_jogos})."
         )
-    melhor = resultados[0]
+    if alvo_jogos is None:
+        melhor = resultados[0]
+    else:
+        melhor, _diff = escolher_combinacao_por_alvo(resultados, alvo_jogos)
     mask_final = mask.copy()
     for nome in grupos:
         valores_aceitos = top1_top2[nome][melhor.escolha[nome]]
