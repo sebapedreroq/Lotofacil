@@ -322,7 +322,7 @@ if rodar:
                 f"O conjunto de combinações é discreto (2¹¹), então nem sempre dá pra bater o número exato."
             )
 
-        jogos_finais = extrair_jogos(universo, mask_final)
+    jogos_finais = extrair_jogos(universo, mask_final)
 
     # ---- Funil ----
     st.subheader("📉 Funil de filtragem")
