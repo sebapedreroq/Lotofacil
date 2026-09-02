@@ -269,6 +269,21 @@ def contar_matrizes_familia(familia: Tuple[int, int, int, int, int]) -> int:
     return math.factorial(5) // denominador
 
 
+def selecionar_matrizes_especificas(
+    universo: UniversoLotofacil, matrizes: Sequence[Tuple[int, int, int, int, int]]
+) -> np.ndarray:
+    """
+    Máscara booleana: união (OR) dos jogos que batem em QUALQUER uma das
+    matrizes exatas informadas. Usado quando o usuário desativa algumas
+    matrizes de uma família (ou das famílias da Dica do Seu José) em vez de
+    usar a família inteira.
+    """
+    mask = np.zeros(universo.N, dtype=bool)
+    for matriz in matrizes:
+        mask |= selecionar_matriz(universo, matriz)
+    return mask
+
+
 # ============================================================
 # Filtros F que aceitam faixa min/max ajustável pelo usuário (em vez de só
 # ligar/desligar). O limite absoluto de cada um é o que já existe no código

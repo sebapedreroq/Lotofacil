@@ -21,6 +21,7 @@ import streamlit as st
 from lotofacil_numpy_engine import (
     V_GRUPOS, NOME_FILTROS_F, FILTROS_F_DEFS, FILTROS_AJUSTAVEIS, FAMILIAS_DICA_SEU_JOSE,
     construir_universo, selecionar_matriz, selecionar_familia, selecionar_dica_seu_jose,
+    selecionar_matrizes_especificas,
     aplicar_filtros_f, aplicar_f12_f13_f14, extrair_jogos,
     calcular_top1_top2_numpy, calcular_score_v_numpy,
     aplicar_melhor_combinacao_v_numpy,
@@ -202,52 +203,81 @@ with st.sidebar:
     rodar = st.button("▶️ Rodar", type="primary", use_container_width=True)
 
 # ============================================================
-# ÁREA PRINCIPAL — resultado
+# ÁREA PRINCIPAL — seleção de matrizes ativas (Família / Dica) + resultado
 # ============================================================
-if modo.startswith("🎩"):
-    st.subheader("🎩 Sobre a Dica do Seu José")
+matrizes_selecionadas: list = []  # usado nos modos "Família" e "🎩 Dica do Seu José"
+
+if modo.startswith("Família"):
+    st.subheader(f"📐 Matrizes da família {_fmt(alvo)}")
     st.markdown(
-        "Uma **família** é um conjunto de contagens por linha (ex: `4/3/3/3/2`), sem se importar com a ordem. "
-        "Uma **matriz** é essa mesma família colocada numa ordem específica entre as 5 linhas da grade "
-        "(a, b, c, d, e). Cada família se desdobra em várias matrizes diferentes — o número exato é:"
+        "Uma **família** é um conjunto de contagens por linha, sem se importar com a ordem. Uma **matriz** "
+        "é essa mesma família colocada numa ordem específica entre as 5 linhas da grade (a, b, c, d, e). "
+        "O número de matrizes de uma família é:"
     )
     st.latex(r"\text{Nº de matrizes} = \dfrac{5!}{r_1! \times r_2! \times \dots \times r_k!}")
+    st.caption("onde cada $r_i$ é quantas vezes um mesmo valor se repete dentro da família.")
+
+    matrizes_familia = listar_matrizes_familia(alvo)
     st.caption(
-        "onde cada $r_i$ é quantas vezes um mesmo valor se repete dentro da família. "
-        "Por exemplo, em 4/3/3/3/2 o valor 3 se repete 3 vezes, então: 5! / 3! = 120 / 6 = **20 matrizes**."
+        f"Essa família tem **{len(matrizes_familia)} matrizes**. Por padrão todas ficam ativas — "
+        "desmarque as que não quiser incluir na análise."
     )
+    opcoes_matrizes = [_fmt(m) for m in matrizes_familia]
+    escolhidas_str = st.multiselect(
+        "Matrizes ativas", options=opcoes_matrizes, default=opcoes_matrizes, key="matrizes_familia_ativas",
+    )
+    matrizes_selecionadas = [matrizes_familia[opcoes_matrizes.index(s)] for s in escolhidas_str]
+    st.divider()
+
+elif modo.startswith("🎩"):
+    st.subheader("🎩 Sobre a Dica do Seu José")
+    st.markdown(
+        "Combina os jogos de **7 famílias fixas** escolhidas pelo Seu José. Cada família se desdobra em "
+        "várias matrizes (ordens de linha) diferentes — por padrão todas ficam ativas, mas dá pra desmarcar "
+        "matrizes específicas de cada família logo abaixo."
+    )
+    st.latex(r"\text{Nº de matrizes} = \dfrac{5!}{r_1! \times r_2! \times \dots \times r_k!}")
 
     df_resumo = pd.DataFrame([
         {"Família": _fmt(f), "Nº de matrizes": contar_matrizes_familia(f)}
         for f in FAMILIAS_DICA_SEU_JOSE
     ])
     st.dataframe(df_resumo, hide_index=True, use_container_width=True)
-    st.caption(f"Total combinado: {df_resumo['Nº de matrizes'].sum()} matrizes distintas entre as 7 famílias.")
 
-    with st.expander("📋 Ver a lista completa de matrizes de cada família"):
-        for familia in FAMILIAS_DICA_SEU_JOSE:
-            matrizes = listar_matrizes_familia(familia)
-            st.markdown(f"**{_fmt(familia)}** — {len(matrizes)} matrizes")
-            df_matrizes = pd.DataFrame({"Matriz": [_fmt(m) for m in matrizes]})
-            st.dataframe(df_matrizes, hide_index=True, use_container_width=True, height=min(38 * (len(matrizes) + 1), 300))
+    for familia in FAMILIAS_DICA_SEU_JOSE:
+        matrizes_familia = listar_matrizes_familia(familia)
+        with st.expander(f"{_fmt(familia)} — {len(matrizes_familia)} matrizes"):
+            opcoes = [_fmt(m) for m in matrizes_familia]
+            escolhidas_str = st.multiselect(
+                f"Matrizes ativas em {_fmt(familia)}", options=opcoes, default=opcoes,
+                key=f"matrizes_dica_{_fmt(familia)}",
+            )
+            matrizes_selecionadas.extend(matrizes_familia[opcoes.index(s)] for s in escolhidas_str)
 
+    st.caption(f"Total de matrizes ativas agora: {len(matrizes_selecionadas)} de {df_resumo['Nº de matrizes'].sum()}.")
     st.divider()
 
 if rodar:
     if not grupos_ativos:
         st.error("Selecione pelo menos um grupo V para continuar.")
         st.stop()
+    if modo.startswith("Família") and not matrizes_selecionadas:
+        st.error("Selecione pelo menos uma matriz dentro da família.")
+        st.stop()
+    if modo.startswith("🎩") and not matrizes_selecionadas:
+        st.error("Selecione pelo menos uma matriz nas famílias da Dica do Seu José.")
+        st.stop()
 
     with st.spinner("Aplicando filtros e calculando..."):
         if modo.startswith("Família"):
-            mask = selecionar_familia(universo, alvo)
-            rotulo_selecao = f"Família {_fmt(alvo)}"
+            mask = selecionar_matrizes_especificas(universo, matrizes_selecionadas)
+            rotulo_selecao = f"Família {_fmt(alvo)} ({len(matrizes_selecionadas)}/{contar_matrizes_familia(alvo)} matrizes ativas)"
         elif modo.startswith("Matriz"):
             mask = selecionar_matriz(universo, alvo)
             rotulo_selecao = f"Matriz {_fmt(alvo)}"
         else:
-            mask = selecionar_dica_seu_jose(universo)
-            rotulo_selecao = "🎩 Dica do Seu José (7 famílias)"
+            mask = selecionar_matrizes_especificas(universo, matrizes_selecionadas)
+            rotulo_selecao = f"🎩 Dica do Seu José ({len(matrizes_selecionadas)} matrizes ativas)"
 
         qtd_apos_selecao = int(mask.sum())
         mask = mask & aplicar_filtros_f(universo, filtros_ativos, faixas_customizadas)
